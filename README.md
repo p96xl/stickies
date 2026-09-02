@@ -84,6 +84,46 @@ decision — leading with HALF DONE.
 You cannot open a session without being reminded they exist, which is the whole anti-orphan
 mechanism. It stays silent when nothing is stale.
 
+## Making capture reliable — the CLAUDE.md rule
+
+The `ideas` skill knows *how* to capture. But a skill fires when it looks relevant, and
+passive capture has to fire while you are busy with something else entirely — which is
+exactly when it won't trigger on its own.
+
+Paste this into your `CLAUDE.md` (`~/.claude/CLAUDE.md` for every project, or a
+project-level one). This is the part that makes it actually work:
+
+```markdown
+## Idea capture (stickies)
+
+While working, if Yuriy states an intent that is NOT the task at hand — a rename, a fix,
+a complaint, "we should also...", "remind me to...", "that's broken", "I need to change X"
+— capture it to the stickies inbox immediately, before continuing.
+
+1. First look for a near-duplicate: `semantic_search` if an Obsidian MCP is available,
+   otherwise `grep -ril "<key words>" "$STICKIES_DIR"`.
+2. If anything looks like the same idea, DO NOT create a file. Say:
+   "Similar to <existing idea> — same thing, or different?" and wait. He decides.
+   If different, write the new file AND add one line to both saying why they differ.
+   If same, touch the existing file (resets its staleness clock) and note the new wording.
+3. Otherwise create it:
+   `python3 ~/.claude/plugins/cache/stickies/scripts/stickies.py new "<idea>" "<heard while>"`
+   then fill in `check:` / `want:` if a shell check is possible, and the
+   `**To be ready:**` line with the one unknown blocking it.
+
+Rules:
+- Silent. ONE line at the end of the reply: `📥 captured: <name>`. Nothing more.
+- NEVER derail the current task to discuss the captured idea. That is the exact behaviour
+  that orphans the work already in progress.
+- Never capture a question, or the thing you are already doing.
+- Always write a real "Heard while:" value. Weeks later it is the only context left.
+- A check must print how much is LEFT (`grep -c ... `, `... | wc -l`) with `want: 0`.
+  Leave it empty rather than invent a check that does not work.
+```
+
+Adjust the `stickies.py` path to wherever the plugin installed — `/plugin` will tell you,
+or just call it by its repo path if you cloned it.
+
 ## The file
 
 ```markdown
@@ -124,10 +164,16 @@ three months.
 **Baking is `raw` → `ready`.** The `To be ready:` line holds the one unknown blocking it.
 An idea isn't waiting on time, it's waiting on one answer. `/ideas` asks you that question.
 
-## Obsidian
+## Obsidian (optional)
 
-Copy `templates/Board.md` into your `STICKIES_DIR`. Needs the Dataview plugin. Six tables:
-Doing, Half done, Ready, Baking, Untouched, Resolved. Generated, never maintained.
+If your `STICKIES_DIR` is inside an Obsidian vault, copy `templates/Board.md` next to your
+ideas. Needs the Dataview plugin. Six tables: Doing, Half done, Ready, Baking, Untouched,
+Resolved. Generated, never maintained.
+
+Dataview can only query files inside the vault, so this is only for people who keep their
+inbox there. **If your vault is read-only or sync-managed, keep the inbox outside it** and
+use the terminal — `/ideas` and the session-start line are the real interface anyway. The
+checks can still read anything on disk, vault included.
 
 ## The runner directly
 

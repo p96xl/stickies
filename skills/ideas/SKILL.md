@@ -40,6 +40,16 @@ One line saying what the idea is.
 
 Keep every file under ~20 lines. They get resolved, not appended to.
 
+## Children
+
+When an idea splits, create the pieces with `--parent <slug>` (or set `parent:` on each).
+The child names the parent, never the reverse. `list` nests them; `check` prints
+`[n of m children resolved]` and flags a parent whose children are all done.
+
+A parent is finished when its children are - ASK before closing it, then resolve it
+`dropped` with `because: superseded by its own children`. Never delete the parent: the
+lineage is the answer to "did I ever do that original idea?".
+
 ## The five statuses
 
 - `raw` — captured, not yet executable. Something is still unknown.

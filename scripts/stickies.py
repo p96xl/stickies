@@ -42,6 +42,7 @@ id: {id}
 status: raw
 created: {created}
 because: ""
+parent: ""
 check: ""
 want: 0
 baseline: ""
@@ -93,6 +94,22 @@ def ideas():
         if fm:
             out.append((p, fm, body))
     return out
+
+
+def kids():
+    """{parent_stem: [(path, fm, body), ...]}. The CHILD names its parent, so a
+    parent never has a list to keep in step. An unknown parent just reads as top level."""
+    known = {p.stem for p, _, _ in ideas()}
+    out = {}
+    for row in ideas():
+        par = (row[1].get("parent") or "").strip().strip("[]")
+        if par and par != row[0].stem and par in known:
+            out.setdefault(par, []).append(row)
+    return out
+
+
+def resolved(fm):
+    return fm.get("status") not in LIVE
 
 
 def title(body):
@@ -161,6 +178,24 @@ def cmd_check(args):
             print(f"  · {name}" + (f"  [{note}]" if note else "") + f"  ({stem})")
     if buckets["HALF DONE"]:
         print("\n^ HALF DONE is where you left off.")
+
+    children = kids()
+    if children:
+        lines, ready_to_close = [], []
+        by_stem = {p.stem: (p, fm, b) for p, fm, b in ideas()}
+        for par, rows in sorted(children.items()):
+            done_n = sum(1 for r in rows if resolved(r[1]))
+            par_row = by_stem.get(par)
+            name = title(par_row[2]) if par_row else par
+            flag = ""
+            if done_n == len(rows) and par_row and not resolved(par_row[1]):
+                flag = "  <- all children resolved, close it?"
+                ready_to_close.append(par)
+            lines.append(f"  · {name}  [{done_n} of {len(rows)} children resolved]{flag}")
+        print(f"\nPARENTS ({len(lines)})")
+        print("\n".join(lines))
+        if ready_to_close:
+            print("\n^ a parent is finished when its children are - confirm before closing.")
     return 0
 
 
@@ -184,12 +219,26 @@ def cmd_stale(args):
 
 def cmd_list(args):
     want = args[0] if args else None
-    for path, fm, body in ideas():
+    children = kids()
+    child_stems = {r[0].stem for rows in children.values() for r in rows}
+
+    def show(row, indent=0):
+        path, fm, body = row
         st = fm.get("status", "?")
         if want and st != want:
-            continue
-        because = fm.get("because") or ""
-        print(f"[{st:<7}] {title(body)}" + (f"  <- {because}" if because else "") + f"  ({path.stem})")
+            return
+        because = (fm.get("because") or "").strip()
+        if len(because) > 56:                     # the full reason lives in the file
+            because = because[:53].rstrip() + "..."
+        lead = "    " * indent + ("- " if indent else "")
+        print(f"[{st:<7}] {lead}{title(body)}" + (f"  <- {because}" if because else ""))
+
+    for row in ideas():
+        if row[0].stem in child_stems:
+            continue          # printed under its parent
+        show(row)
+        for kid in children.get(row[0].stem, []):
+            show(kid, 1)
     return 0
 
 
@@ -389,6 +438,14 @@ def cmd_new(args):
     if not args:
         print('usage: stickies.py new "<idea text>" [heard-while]', file=sys.stderr)
         return 2
+    parent = ""
+    if "--parent" in args:
+        i = args.index("--parent")
+        parent = args[i + 1] if len(args) > i + 1 else ""
+        args = args[:i] + args[i + 2:]
+    if not args:
+        print('usage: stickies.py new "<idea text>" [heard-while] [--parent <slug>]', file=sys.stderr)
+        return 2
     text = args[0]
     heard = args[1] if len(args) > 1 else "(not recorded)"
     INBOX.mkdir(parents=True, exist_ok=True)
@@ -402,6 +459,8 @@ def cmd_new(args):
         TEMPLATE.format(id=nid, created=date.today().isoformat(), text=text, heard=heard),
         encoding="utf-8",
     )
+    if parent:
+        write_fm(path, {"parent": parent})
     print(path)
     return 0
 
@@ -493,6 +552,41 @@ def selftest():
             cmd_mark([])
         # the cache must never be counted as an idea
         assert len(ideas()) == 2, len(ideas())
+
+        # parent/child: a child names its parent, and progress rolls up
+        cmd_new(["Child one", "t", "--parent", p.stem])
+        cmd_new(["Child two", "t", "--parent", p.stem])
+        c1 = next(x for x in INBOX.glob("*.md") if x.stem == "child-one")
+        c2 = next(x for x in INBOX.glob("*.md") if x.stem == "child-two")
+        assert parse(c1)[0]["parent"] == p.stem, parse(c1)[0]
+        assert set(kids()) == {p.stem}, kids()
+        assert len(kids()[p.stem]) == 2
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cmd_check([])
+        assert "0 of 2 children resolved" in out.getvalue(), out.getvalue()
+
+        write_fm(c1, {"status": "done"})
+        write_fm(c2, {"status": "dropped"})
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cmd_check([])
+        assert "2 of 2 children resolved" in out.getvalue(), out.getvalue()
+        assert "close it?" in out.getvalue(), out.getvalue()
+
+        # list nests the children under the parent, once each
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cmd_list([])
+        txt = out.getvalue()
+        assert txt.count("Child one") == 1 and "└─ Child one" in txt, txt
+        # a dangling or self parent must not break anything
+        write_fm(c1, {"parent": "no-such-idea"})
+        write_fm(c2, {"parent": c2.stem})
+        assert kids() == {}, kids()
+        for f in (c1, c2):
+            f.unlink()
 
         assert run_check("echo not-a-number") is None
         assert run_check("exit 1") is None

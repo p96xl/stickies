@@ -201,6 +201,31 @@ stickies selftest
 No dependencies. Python 3.9+.
 
 
+## Children
+
+An idea that splits gets children. The **child** names its parent, so the parent never has a
+list to keep in step:
+
+```yaml
+parent: "rescope-cloudflare-rules"     # or: stickies new "..." --parent <slug>
+```
+
+`list` nests them. `check` rolls progress up:
+
+```
+PARENTS (1)
+  - Rescope Cloudflare rules   [8 of 12 children resolved]
+```
+
+A parent is finished when its children are. When they all resolve, `check` says
+`all children resolved, close it?` - it asks, it does not close anything for you, on the same
+principle as a passing check being evidence rather than proof.
+
+This is the case a flat todo list handles worst: one idea becomes many, the original never
+gets ticked, and months later nobody can tell whether it happened. Here the original stays
+put with its lineage attached, and `dropped ... because superseded by its own children` is a
+real, readable outcome.
+
 ## Backup and restore
 
 The inbox is local files. The vault copy is the backup, and it travels **through the Obsidian

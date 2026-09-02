@@ -193,10 +193,29 @@ stickies check          # run every check, print the buckets
 stickies stale 21       # live ideas untouched over 21 days
 stickies list ready     # everything, or one status
 stickies new "text" "heard while"
+stickies export > snapshot.md
+stickies import snapshot.md
 stickies selftest
 ```
 
 No dependencies. Python 3.9+.
+
+
+## Backup and restore
+
+The inbox is local files. The vault copy is the backup, and it travels **through the Obsidian
+MCP in both directions** - not through a synced folder - so it works on any machine with the
+connector, and no vault address is ever stored in this repo.
+
+```bash
+stickies export > snapshot.md     # then Claude write_note's it to the vault
+stickies import snapshot.md       # after Claude read_note's it back
+```
+
+The snapshot is lossless - each idea file is embedded verbatim between HTML-comment
+delimiters, so `check:` commands and baselines survive the round trip. A prose summary would
+quietly drop them, which is how a backup turns out to be worthless on the day you need it.
+`import` refuses to overwrite existing files unless you pass `--force`.
 
 ## What it deliberately doesn't have
 

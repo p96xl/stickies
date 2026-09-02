@@ -108,3 +108,32 @@ which is the failure this whole system exists to prevent.
 
 Edit frontmatter only — `status:` and `because:`. Never delete an idea file. A `dropped`
 idea with its reason is what stops the same idea being proposed again in three months.
+
+---
+
+# Backup and restore (Obsidian MCP, both directions)
+
+The inbox lives on local disk. The vault copy is the backup, and it moves **through MCP in
+both directions** - never through a synced folder, so it works on any machine where an
+Obsidian MCP is configured. No vault address is stored in this plugin.
+
+**Back up** - do this at the end of a triage pass, or whenever several ideas changed:
+
+1. `stickies export > /tmp/stickies-snapshot.md`
+2. Read that file and `write_note` it to `Stickies/Inbox.md` in the vault.
+
+The snapshot is lossless: every idea file is embedded verbatim between
+`<!-- stickies:file NAME.md -->` delimiters, so nothing is lost - including `check:` commands,
+which a prose summary would drop.
+
+**Restore** - on a new machine, or after losing the inbox:
+
+1. `read_note` on `Stickies/Inbox.md`.
+2. Write what comes back to a local file.
+3. `stickies import /tmp/stickies-snapshot.md`
+
+Import never overwrites an existing idea file unless `--force` is passed, so running it
+against a populated inbox is safe and only fills in what is missing.
+
+Tell the user the counts after either direction. A backup nobody can see the size of is a
+backup nobody trusts.

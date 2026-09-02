@@ -9,6 +9,11 @@ baseline: is what the number was the first time we ever looked.
   last == baseline            -> NOT STARTED
   anything between            -> HALF DONE   <- this is "where was I"
 
+Backup runs through an Obsidian MCP in BOTH directions: `export` emits one
+lossless document for Claude to write into the vault, `import` rebuilds the
+inbox from that document on any machine. No filesystem sync required, and no
+vault address is stored here - Claude uses whatever connector is configured.
+
 ponytail: no yaml dep, we control the file format so a line parser is enough.
 """
 import os
@@ -20,6 +25,8 @@ from pathlib import Path
 
 INBOX = Path(os.environ.get("STICKIES_DIR", Path.home() / "stickies")).expanduser()
 LIVE = ("raw", "ready", "doing")
+
+BEGIN, END, FILE = "<!-- stickies:begin -->", "<!-- stickies:end -->", "<!-- stickies:file "
 
 TEMPLATE = """---
 id: {id}
@@ -41,7 +48,7 @@ tags: [type/idea]
 
 
 def parse(path):
-    """Return (frontmatter dict, body str). Missing/!malformed frontmatter -> ({}, text)."""
+    """Return (frontmatter dict, body str). Missing/malformed frontmatter -> ({}, text)."""
     raw = path.read_text(encoding="utf-8")
     m = re.match(r"^---\n(.*?)\n---\n?(.*)$", raw, re.S)
     if not m:
@@ -60,8 +67,7 @@ def write_fm(path, updates):
     raw = path.read_text(encoding="utf-8")
     for k, v in updates.items():
         pat = re.compile(rf"^({re.escape(k)}:).*$", re.M)
-        new = f'\\1 "{v}"'
-        raw, n = pat.subn(new, raw, count=1)
+        raw, n = pat.subn(f'\\1 "{v}"', raw, count=1)
         if not n:  # key absent - insert before closing delimiter
             raw = re.sub(r"\n---\n", f'\n{k}: "{v}"\n---\n', raw, count=1)
     path.write_text(raw, encoding="utf-8")
@@ -178,9 +184,65 @@ def cmd_list(args):
     return 0
 
 
+def cmd_export(args):
+    """Emit the whole inbox as ONE lossless document for the vault.
+
+    Every idea file goes in verbatim between HTML-comment delimiters, so `import`
+    reproduces it byte for byte on any machine. ponytail: comments, not code fences -
+    an idea body can contain backticks and a fence war is not worth the cleverness.
+    """
+    rows = ideas()
+    live = [r for r in rows if r[1].get("status") in LIVE]
+    out = ["---", "tags: [type/index, domain/personal]", "---", "",
+           "# Stickies - Inbox Snapshot", "",
+           f"{len(rows)} ideas ({len(live)} live), exported {date.today()} from `{INBOX}`.",
+           "",
+           "**Do not edit this note.** It is a backup. To restore on any machine, ask Claude",
+           "to read this note back and run `stickies import`.", "", "## Contents", ""]
+    for path, fm, body in sorted(rows, key=lambda r: (r[1].get("status", ""), r[0].name)):
+        out.append(f"- `{fm.get('status', '?'):<7}` {title(body)}")
+    out += ["", BEGIN, ""]
+    for path, fm, body in rows:
+        out += [FILE + path.name + " -->", path.read_text(encoding="utf-8").rstrip(), ""]
+    out += [END, ""]
+    print("\n".join(out))
+    return 0
+
+
+def cmd_import(args):
+    """Rebuild the inbox from an exported snapshot. Never overwrites without --force."""
+    if not args:
+        print('usage: stickies.py import <snapshot.md> [--force]', file=sys.stderr)
+        return 2
+    text = Path(args[0]).expanduser().read_text(encoding="utf-8")
+    force = "--force" in args
+    if BEGIN not in text or END not in text:
+        print("not a stickies snapshot - no delimiters found", file=sys.stderr)
+        return 1
+    payload = text.split(BEGIN, 1)[1].rsplit(END, 1)[0]
+    INBOX.mkdir(parents=True, exist_ok=True)
+    wrote = skipped = 0
+    for chunk in payload.split(FILE)[1:]:
+        name, _, content = chunk.partition(" -->\n")
+        name = name.strip()
+        # the snapshot is data, not a trusted source of paths
+        if not name.endswith(".md") or "/" in name or "\\" in name or name.startswith("."):
+            print(f"  skipped suspicious name: {name!r}", file=sys.stderr)
+            continue
+        dest = INBOX / name
+        if dest.exists() and not force:
+            skipped += 1
+            continue
+        dest.write_text(content.strip() + "\n", encoding="utf-8")
+        wrote += 1
+    print(f"imported {wrote} idea(s) into {INBOX}"
+          + (f", skipped {skipped} already present (use --force to overwrite)" if skipped else ""))
+    return 0
+
+
 def cmd_new(args):
     if not args:
-        print("usage: stickies.py new \"<idea text>\" [heard-while]", file=sys.stderr)
+        print('usage: stickies.py new "<idea text>" [heard-while]', file=sys.stderr)
         return 2
     text = args[0]
     heard = args[1] if len(args) > 1 else "(not recorded)"
@@ -200,11 +262,13 @@ def cmd_new(args):
 
 
 def selftest():
+    import contextlib
+    import io
     import tempfile
 
     global INBOX
     with tempfile.TemporaryDirectory() as d:
-        INBOX = Path(d)
+        INBOX = Path(d) / "inbox"
         cmd_new(["Rename PO# to RR#", "testing"])
         p = next(INBOX.glob("*.md"))
         fm, body = parse(p)
@@ -230,7 +294,6 @@ def selftest():
         assert fm["baseline"] == "12" and fm["last"] == "0", fm
 
         # a check that passes on its first ever run is suspect, not done
-        p2 = INBOX / "already.md"
         cmd_new(["Already true", "t"])
         p2 = next(x for x in INBOX.glob("*.md") if x != p)
         write_fm(p2, {"check": "echo 0", "want": 0})
@@ -238,6 +301,27 @@ def selftest():
         fm2, _ = parse(p2)
         assert fm2["baseline"] == "0" and fm2["last"] == "0", fm2
         write_fm(p2, {"status": "dropped"})
+
+        # export -> import must reproduce every file byte for byte
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            cmd_export([])
+        snap = buf.getvalue()
+        assert "# Stickies - Inbox Snapshot" in snap and BEGIN in snap, snap[:300]
+        before = {f.name: f.read_text() for f in INBOX.glob("*.md")}
+        snapfile = Path(d) / "snap.txt"
+        snapfile.write_text(snap)
+        for f in INBOX.glob("*.md"):
+            f.unlink()
+        with contextlib.redirect_stdout(io.StringIO()):
+            cmd_import([str(snapfile)])
+        after = {f.name: f.read_text() for f in INBOX.glob("*.md")}
+        assert after == before, f"round trip lost data: {set(before) ^ set(after)}"
+        # a second import must not clobber what is already there
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cmd_import([str(snapfile)])
+        assert "skipped 2" in out.getvalue(), out.getvalue()
 
         assert run_check("echo not-a-number") is None
         assert run_check("exit 1") is None
@@ -257,6 +341,7 @@ def selftest():
 
 def main():
     cmds = {"check": cmd_check, "stale": cmd_stale, "list": cmd_list, "new": cmd_new,
+            "export": cmd_export, "import": cmd_import,
             "selftest": lambda a: selftest()}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(f"usage: stickies.py {{{'|'.join(cmds)}}} [args]   (inbox: {INBOX})", file=sys.stderr)

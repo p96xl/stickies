@@ -96,14 +96,14 @@ project-level one). This is the part that makes it actually work:
 ```markdown
 ## Idea capture (stickies)
 
-While working, if Yuriy states an intent that is NOT the task at hand — a rename, a fix,
+While working, if the user states an intent that is NOT the task at hand — a rename, a fix,
 a complaint, "we should also...", "remind me to...", "that's broken", "I need to change X"
 — capture it to the stickies inbox immediately, before continuing.
 
 1. First look for a near-duplicate: `semantic_search` if an Obsidian MCP is available,
    otherwise `grep -ril "<key words>" "$STICKIES_DIR"`.
 2. If anything looks like the same idea, DO NOT create a file. Say:
-   "Similar to <existing idea> — same thing, or different?" and wait. He decides.
+   "Similar to <existing idea> — same thing, or different?" and wait. The user decides.
    If different, write the new file AND add one line to both saying why they differ.
    If same, touch the existing file (resets its staleness clock) and note the new wording.
 3. Otherwise create it:

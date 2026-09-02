@@ -2,13 +2,19 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "stickies",
   "displayName": "Stickies",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "An idea inbox that checks its own state. Captures small ideas as you speak them, one file each, and tells you which are done, half done, or never started.",
-  "author": { "name": "p96xl" },
+  "author": {
+    "name": "p96xl"
+  },
   "repository": "https://github.com/p96xl/stickies",
   "license": "MIT",
-  "keywords": ["ideas", "todo", "capture", "adhd", "obsidian", "inbox"],
-  "skills": ["./skills/"],
-  "commands": ["./commands/"],
-  "hooks": "./hooks/hooks.json"
+  "keywords": [
+    "ideas",
+    "todo",
+    "capture",
+    "adhd",
+    "obsidian",
+    "inbox"
+  ]
 }

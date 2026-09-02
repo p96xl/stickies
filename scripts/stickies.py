@@ -580,7 +580,7 @@ def selftest():
         with contextlib.redirect_stdout(out):
             cmd_list([])
         txt = out.getvalue()
-        assert txt.count("Child one") == 1 and "└─ Child one" in txt, txt
+        assert txt.count("Child one") == 1 and "- Child one" in txt, txt
         # a dangling or self parent must not break anything
         write_fm(c1, {"parent": "no-such-idea"})
         write_fm(c2, {"parent": c2.stem})

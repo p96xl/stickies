@@ -28,8 +28,15 @@ class VaultError(RuntimeError):
 
 
 def redact(text):
-    """Never let the secret path segment reach a terminal or a log."""
-    return re.sub(r"(https?://[^/\s]+)/\S+", r"\1/<redacted>", str(text))
+    """Never let a secret reach a terminal or a log.
+
+    Masks whole URLs AND any bare high-entropy token. A previous version only
+    masked URL paths and only recognised hex, so a mixed-case base64url secret
+    printed in full when a caller sed'd the path out on its own. Assume any long
+    unbroken token is a credential and mask it.
+    """
+    s = re.sub(r"(https?://[^/\s]+)/\S+", r"\1/<redacted>", str(text))
+    return re.sub(r"(?<![\w-])[A-Za-z0-9_-]{20,}(?![\w-])", "<redacted>", s)
 
 
 def load_url():
@@ -73,6 +80,10 @@ class Vault:
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
+            # Cloudflare's Browser Integrity Check answers 1010/403 to the default
+            # "Python-urllib/x.y". An honest product UA passes; measured, not guessed.
+            # This identifies the client truthfully - it does not impersonate a browser.
+            "User-Agent": "stickies/0.4.0 (+https://github.com/p96xl/stickies)",
         }
         if self.session:
             headers["Mcp-Session-Id"] = self.session

@@ -103,7 +103,8 @@ def run_check(cmd):
 
 
 def cmd_check(args):
-    buckets = {"DONE": [], "HALF DONE": [], "NOT STARTED": [], "BROKEN CHECK": [], "NO CHECK": []}
+    buckets = {"DONE": [], "HALF DONE": [], "NOT STARTED": [], "SUSPECT CHECK": [],
+               "BROKEN CHECK": [], "NO CHECK": []}
     for path, fm, body in ideas():
         if fm.get("status") not in LIVE:
             continue
@@ -118,11 +119,17 @@ def cmd_check(args):
         want = int(fm.get("want") or 0)
         base = fm.get("baseline")
         base = int(base) if str(base).strip().lstrip("-").isdigit() else None
-        if base is None:  # first ever look - this is the starting line
+        first_look = base is None
+        if first_look:  # this is the starting line
             base = got
             write_fm(path, {"baseline": got})
         write_fm(path, {"last": got})
-        if got == want:
+        if got == want and first_look:
+            # A check that passes the very first time it runs is more often a broken
+            # check than a finished idea. Silently reporting DONE here is how the whole
+            # system loses your trust, so make a human look at it instead.
+            bucket, note = "SUSPECT CHECK", "passes on its first ever run - verify it"
+        elif got == want:
             bucket, note = "DONE", "check passes"
         elif got == base:
             bucket, note = "NOT STARTED", f"{got} left"
@@ -130,7 +137,7 @@ def cmd_check(args):
             bucket, note = "HALF DONE", f"{got} left, was {base}"
         buckets[bucket].append((name, path.stem, note))
 
-    for label in ("HALF DONE", "NOT STARTED", "BROKEN CHECK", "NO CHECK", "DONE"):
+    for label in ("HALF DONE", "NOT STARTED", "SUSPECT CHECK", "BROKEN CHECK", "NO CHECK", "DONE"):
         rows = buckets[label]
         if not rows:
             continue
@@ -180,7 +187,7 @@ def cmd_new(args):
     INBOX.mkdir(parents=True, exist_ok=True)
     nums = [int(m.group(1)) for _, fm, _ in ideas() if (m := re.match(r"^(\d+)$", str(fm.get("id", ""))))]
     nid = f"{max(nums, default=0) + 1:04d}"
-    slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:48] or nid
+    slug = re.sub(r"[^a-z0-9]+", "-", text.lower())[:48].strip("-") or nid
     path = INBOX / f"{slug}.md"
     if path.exists():
         path = INBOX / f"{slug}-{nid}.md"
@@ -222,6 +229,16 @@ def selftest():
         fm, _ = parse(p)
         assert fm["baseline"] == "12" and fm["last"] == "0", fm
 
+        # a check that passes on its first ever run is suspect, not done
+        p2 = INBOX / "already.md"
+        cmd_new(["Already true", "t"])
+        p2 = next(x for x in INBOX.glob("*.md") if x != p)
+        write_fm(p2, {"check": "echo 0", "want": 0})
+        cmd_check([])
+        fm2, _ = parse(p2)
+        assert fm2["baseline"] == "0" and fm2["last"] == "0", fm2
+        write_fm(p2, {"status": "dropped"})
+
         assert run_check("echo not-a-number") is None
         assert run_check("exit 1") is None
 
@@ -230,7 +247,10 @@ def selftest():
         assert [i for i in ideas() if i[1]["status"] in LIVE] == []
         # a file with no frontmatter must not crash the walk
         (INBOX / "junk.md").write_text("no frontmatter here", encoding="utf-8")
-        assert len(ideas()) == 1
+        assert len(ideas()) == 2
+        # slug must not keep a dash left behind by truncation
+        cmd_new(["x" * 60 + " tail", "t"])
+        assert not any(f.stem.endswith("-") for f in INBOX.glob("*.md"))
     print("selftest ok")
     return 0
 

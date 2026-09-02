@@ -154,5 +154,9 @@ to maintain. Add them when the flat folder is actually the thing hurting.
   them in, but it isn't automatic.
 - **It will over-capture at first.** Expect to drop a few in the first week.
 - **A passing check is evidence, not proof.** `/ideas` asks before marking anything done.
+  A check that passes the *first* time it ever runs is reported as SUSPECT CHECK rather
+  than DONE — far more often the check is wrong than the work is already finished. This
+  caught a real bug on the first idea ever filed: a mangled `grep` pattern matched nothing
+  and the runner cheerfully declared 478 open items complete.
 
 MIT.

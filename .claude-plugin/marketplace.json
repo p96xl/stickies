@@ -1,0 +1,14 @@
+{
+  "$schema": "https://code.claude.com/schemas/marketplace.json",
+  "name": "stickies",
+  "description": "The stickies idea inbox.",
+  "owner": { "name": "p96xl" },
+  "plugins": [
+    {
+      "name": "stickies",
+      "source": ".",
+      "description": "An idea inbox that checks its own state.",
+      "category": "productivity"
+    }
+  ]
+}

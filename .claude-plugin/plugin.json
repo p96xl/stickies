@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "stickies",
   "displayName": "Stickies",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "An idea inbox that checks its own state. Captures small ideas as you speak them, one file each, and tells you which are done, half done, or never started.",
   "author": {
     "name": "p96xl"

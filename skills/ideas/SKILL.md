@@ -121,20 +121,23 @@ so it works on any machine with a connector. No vault address is stored in this 
 synced copy of each idea, so a one-idea edit costs about 1 KB instead of re-sending the whole
 inbox. That difference is the whole point: measured, 426 bytes against 25,122.
 
-**Back up** - at the end of a triage pass, or whenever ideas changed:
+**If a vault URL is configured** (`~/.config/stickies/mcp-url`), stickies talks to the vault
+ITSELF. Prefer this always - the note content never enters your context:
 
-1. `stickies changed` - prints only what needs pushing. Empty output means stop, nothing to do.
-2. For each name listed, read `$STICKIES_DIR/<name>` and `write_note` it to `Stickies/<stem>.md`.
-3. `stickies index` and `write_note` that to `Stickies/Index.md`.
-4. `stickies mark` to record that the cache now matches the vault.
+    stickies push      # sends changed ideas + the index, updates the cache
+    stickies pull      # fetches ideas, keeps local files unless --force
 
-Never skip step 4 - without it the next sync re-pushes everything.
+You read one summary line. Do NOT call read_note/write_note yourself when these work.
 
-**Restore** on a new machine:
+**Fallback, only when no URL is configured** - then you are the transport:
 
-1. `read_note` on `Stickies/Index.md` to see what exists.
-2. `read_note` each idea note, write it to `$STICKIES_DIR/<name>.md`.
-3. `stickies mark` so the cache reflects reality.
+1. `stickies changed` - prints only what needs pushing. Empty means stop.
+2. For each name, read `$STICKIES_DIR/<name>` and `write_note` it to `Stickies/<stem>.md`.
+3. `stickies index`, `write_note` to `Stickies/Index.md`.
+4. `stickies mark` - never skip this, or the next sync re-pushes everything.
+
+**Never ask the user to paste the vault URL into the conversation.** It is the credential -
+a secret UUID in the path. Tell them to write it to the config file themselves.
 
 `stickies export` / `import` still exist for a single-file snapshot - useful for a one-shot
 archive, but it costs the full inbox every time, so prefer `changed` for routine syncing.

@@ -208,12 +208,33 @@ MCP in both directions** - not through a synced folder - so it works on any mach
 connector, and no vault address is ever stored in this repo.
 
 ```bash
+stickies push         # send changed ideas straight to the vault over MCP
+stickies pull         # fetch ideas from the vault
 stickies changed      # only the ideas that differ from the last vault sync
 stickies mark         # record that the cache now matches the vault
 stickies index        # the small index note for the vault
 stickies export > snapshot.md     # one-file archive (costs the whole inbox)
 stickies import snapshot.md       # rebuild from a snapshot
 ```
+
+`push` and `pull` speak MCP themselves, so **the content never passes through an
+assistant's context** - pulling the whole inbox costs one line of output instead of ~25 KB.
+It also means you can sync from your own terminal with no assistant involved.
+
+### Pointing it at your vault
+
+FastMCP Streamable-HTTP servers commonly authenticate with a **secret UUID in the URL path**.
+That URL *is* the credential, so stickies never accepts it as a command-line argument (argv is
+visible to `ps`), never logs it, and redacts it from every error message.
+
+```bash
+mkdir -p ~/.config/stickies
+printf 'https://your-server/mcp/YOUR-SECRET\n' > ~/.config/stickies/mcp-url
+chmod 600 ~/.config/stickies/mcp-url
+```
+
+`$STICKIES_MCP_URL` works too. Plain `http://` is refused. A config file with group or world
+read permissions is refused. Do not paste the URL into a chat window.
 
 Sync is **incremental**. A local cache under `$STICKIES_DIR/.vault-cache/` remembers what the
 vault last received, so editing one idea moves ~1 KB instead of the whole inbox - measured,

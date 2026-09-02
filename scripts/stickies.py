@@ -304,6 +304,87 @@ def cmd_index(args):
     return 0
 
 
+def _vault():
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from vault import Vault, VaultError  # noqa: E402
+    try:
+        return Vault().connect(), VaultError
+    except VaultError as e:
+        print(f"vault: {e}", file=sys.stderr)
+        raise SystemExit(1)
+
+
+def cmd_push(args):
+    """Send only the ideas that changed. Content never crosses an assistant's context."""
+    v, VaultError = _vault()
+    live = {p.name: p for p, _, _ in ideas()}
+    cache = {f.name: f.read_text(encoding="utf-8") for f in cache_dir().glob("*.md")}
+    todo = [n for n, path in live.items() if cache.get(n) != path.read_text(encoding="utf-8")]
+    if not todo and "--all" not in args:
+        print("nothing to push - already in sync")
+        return 0
+    if "--all" in args:
+        todo = sorted(live)
+    cache_dir().mkdir(parents=True, exist_ok=True)
+    sent = 0
+    for name in sorted(todo):
+        body = live[name].read_text(encoding="utf-8")
+        try:
+            v.write_note(f"Stickies/{name}", body)
+        except VaultError as e:
+            print(f"  FAILED {name}: {e}", file=sys.stderr)
+            continue
+        (cache_dir() / name).write_text(body, encoding="utf-8")
+        sent += 1
+        print(f"  pushed {name} ({len(body)} bytes)")
+    import io, contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        cmd_index([])
+    try:
+        v.write_note("Stickies/Index.md", buf.getvalue())
+    except VaultError as e:
+        print(f"  index not updated: {e}", file=sys.stderr)
+    print(f"pushed {sent} idea(s) + index")
+    return 0
+
+
+def cmd_pull(args):
+    """Fetch ideas from the vault. Existing files are kept unless --force."""
+    v, VaultError = _vault()
+    force = "--force" in args
+    paths = v.list_folder("Stickies")
+    if not paths:
+        print("vault has no Stickies/*.md tagged type/idea")
+        return 0
+    INBOX.mkdir(parents=True, exist_ok=True)
+    cache_dir().mkdir(parents=True, exist_ok=True)
+    got = skipped = 0
+    for vpath in sorted(paths):
+        name = vpath.rsplit("/", 1)[-1]
+        if name == "Index.md":
+            continue
+        dest = INBOX / name
+        if dest.exists() and not force:
+            skipped += 1
+            continue
+        try:
+            body = v.read_note(vpath)
+        except VaultError as e:
+            print(f"  FAILED {name}: {e}", file=sys.stderr)
+            continue
+        if not body.strip():
+            print(f"  empty, skipped: {name}", file=sys.stderr)
+            continue
+        dest.write_text(body.rstrip() + "\n", encoding="utf-8")
+        (cache_dir() / name).write_text(dest.read_text(encoding="utf-8"), encoding="utf-8")
+        got += 1
+        print(f"  pulled {name} ({len(body)} bytes)")
+    print(f"pulled {got} idea(s)"
+          + (f", skipped {skipped} already present (use --force to overwrite)" if skipped else ""))
+    return 0
+
+
 def cmd_new(args):
     if not args:
         print('usage: stickies.py new "<idea text>" [heard-while]', file=sys.stderr)
@@ -433,6 +514,7 @@ def main():
     cmds = {"check": cmd_check, "stale": cmd_stale, "list": cmd_list, "new": cmd_new,
             "export": cmd_export, "import": cmd_import,
             "changed": cmd_changed, "mark": cmd_mark, "index": cmd_index,
+            "push": cmd_push, "pull": cmd_pull,
             "selftest": lambda a: selftest()}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(f"usage: stickies.py {{{'|'.join(cmds)}}} [args]   (inbox: {INBOX})", file=sys.stderr)

@@ -208,9 +208,17 @@ MCP in both directions** - not through a synced folder - so it works on any mach
 connector, and no vault address is ever stored in this repo.
 
 ```bash
-stickies export > snapshot.md     # then Claude write_note's it to the vault
-stickies import snapshot.md       # after Claude read_note's it back
+stickies changed      # only the ideas that differ from the last vault sync
+stickies mark         # record that the cache now matches the vault
+stickies index        # the small index note for the vault
+stickies export > snapshot.md     # one-file archive (costs the whole inbox)
+stickies import snapshot.md       # rebuild from a snapshot
 ```
+
+Sync is **incremental**. A local cache under `$STICKIES_DIR/.vault-cache/` remembers what the
+vault last received, so editing one idea moves ~1 KB instead of the whole inbox - measured,
+426 bytes against 25,122. The vault holds one small note per idea rather than one large file,
+which also keeps every file comfortably readable over MCP.
 
 The snapshot is lossless - each idea file is embedded verbatim between HTML-comment
 delimiters, so `check:` commands and baselines survive the round trip. A prose summary would

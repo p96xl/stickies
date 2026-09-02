@@ -111,29 +111,33 @@ idea with its reason is what stops the same idea being proposed again in three m
 
 ---
 
-# Backup and restore (Obsidian MCP, both directions)
+# Backup and restore (Obsidian MCP, incremental)
 
-The inbox lives on local disk. The vault copy is the backup, and it moves **through MCP in
-both directions** - never through a synced folder, so it works on any machine where an
-Obsidian MCP is configured. No vault address is stored in this plugin.
+The inbox is local files. The vault holds **one note per idea** under `Stickies/`, plus a
+small `Stickies/Index.md`. Sync moves through MCP in both directions - never a synced folder -
+so it works on any machine with a connector. No vault address is stored in this plugin.
 
-**Back up** - do this at the end of a triage pass, or whenever several ideas changed:
+**Only push what changed.** A local cache at `$STICKIES_DIR/.vault-cache/` holds the last
+synced copy of each idea, so a one-idea edit costs about 1 KB instead of re-sending the whole
+inbox. That difference is the whole point: measured, 426 bytes against 25,122.
 
-1. `stickies export > /tmp/stickies-snapshot.md`
-2. Read that file and `write_note` it to `Stickies/Inbox.md` in the vault.
+**Back up** - at the end of a triage pass, or whenever ideas changed:
 
-The snapshot is lossless: every idea file is embedded verbatim between
-`<!-- stickies:file NAME.md -->` delimiters, so nothing is lost - including `check:` commands,
-which a prose summary would drop.
+1. `stickies changed` - prints only what needs pushing. Empty output means stop, nothing to do.
+2. For each name listed, read `$STICKIES_DIR/<name>` and `write_note` it to `Stickies/<stem>.md`.
+3. `stickies index` and `write_note` that to `Stickies/Index.md`.
+4. `stickies mark` to record that the cache now matches the vault.
 
-**Restore** - on a new machine, or after losing the inbox:
+Never skip step 4 - without it the next sync re-pushes everything.
 
-1. `read_note` on `Stickies/Inbox.md`.
-2. Write what comes back to a local file.
-3. `stickies import /tmp/stickies-snapshot.md`
+**Restore** on a new machine:
 
-Import never overwrites an existing idea file unless `--force` is passed, so running it
-against a populated inbox is safe and only fills in what is missing.
+1. `read_note` on `Stickies/Index.md` to see what exists.
+2. `read_note` each idea note, write it to `$STICKIES_DIR/<name>.md`.
+3. `stickies mark` so the cache reflects reality.
 
-Tell the user the counts after either direction. A backup nobody can see the size of is a
-backup nobody trusts.
+`stickies export` / `import` still exist for a single-file snapshot - useful for a one-shot
+archive, but it costs the full inbox every time, so prefer `changed` for routine syncing.
+
+Tell the user the counts and the bytes moved. A backup nobody can see the size of is a backup
+nobody trusts.

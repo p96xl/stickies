@@ -26,6 +26,15 @@ from pathlib import Path
 INBOX = Path(os.environ.get("STICKIES_DIR", Path.home() / "stickies")).expanduser()
 LIVE = ("raw", "ready", "doing")
 
+
+def cache_dir():
+    """Last-known vault contents, so sync moves only what changed (~1 KB, not ~25 KB).
+
+    A function, not a constant: selftest reassigns INBOX, and a module-level CACHE
+    computed at import time kept pointing at the real inbox and wrote test files into it.
+    """
+    return INBOX / ".vault-cache"
+
 BEGIN, END, FILE = "<!-- stickies:begin -->", "<!-- stickies:end -->", "<!-- stickies:file "
 
 TEMPLATE = """---
@@ -77,7 +86,7 @@ def ideas():
     if not INBOX.is_dir():
         return []
     out = []
-    for p in sorted(INBOX.glob("*.md")):
+    for p in sorted(INBOX.glob("*.md")):  # top level only - .vault-cache is a subdir
         if p.name.lower() in ("board.md", "readme.md", "index.md"):
             continue
         fm, body = parse(p)
@@ -233,10 +242,65 @@ def cmd_import(args):
         if dest.exists() and not force:
             skipped += 1
             continue
-        dest.write_text(content.strip() + "\n", encoding="utf-8")
+        body_text = content.strip() + "\n"
+        dest.write_text(body_text, encoding="utf-8")
+        cache_dir().mkdir(parents=True, exist_ok=True)
+        (cache_dir() / name).write_text(body_text, encoding="utf-8")
         wrote += 1
     print(f"imported {wrote} idea(s) into {INBOX}"
           + (f", skipped {skipped} already present (use --force to overwrite)" if skipped else ""))
+    return 0
+
+
+def cmd_changed(args):
+    """Names of ideas that differ from the last synced vault copy. Empty = in sync."""
+    cache_dir().mkdir(parents=True, exist_ok=True)
+    live = {p.name: p.read_text(encoding="utf-8") for p, _, _ in ideas()}
+    cached = {f.name: f.read_text(encoding="utf-8") for f in cache_dir().glob("*.md")}
+    push = sorted(n for n, c in live.items() if cached.get(n) != c)
+    gone = sorted(n for n in cached if n not in live)
+    for n in push:
+        print(("NEW   " if n not in cached else "CHANGED ") + n)
+    for n in gone:
+        print("LOCAL-ONLY-DELETED " + n)
+    if not push and not gone:
+        print("in sync with the vault cache")
+    return 0
+
+
+def cmd_mark(args):
+    """Record that named ideas (or all) now match the vault. Run AFTER a successful push."""
+    cache_dir().mkdir(parents=True, exist_ok=True)
+    live = {p.name: p for p, _, _ in ideas()}
+    names = [a for a in args if not a.startswith("-")] or list(live)
+    n = 0
+    for name in names:
+        src = live.get(name)
+        if not src:
+            print(f"  no such idea: {name}", file=sys.stderr)
+            continue
+        (cache_dir() / name).write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        n += 1
+    print(f"cache updated for {n} idea(s)")
+    return 0
+
+
+def cmd_index(args):
+    """The small index note for the vault - names and statuses only, no bodies."""
+    rows = ideas()
+    live = [r for r in rows if r[1].get("status") in LIVE]
+    print("---")
+    print("tags: [type/index, domain/personal]")
+    print("---")
+    print()
+    print("# Stickies - Index")
+    print()
+    print(f"{len(rows)} ideas, {len(live)} live. Synced {date.today()}.")
+    print()
+    print("One note per idea in this folder. Restore with `stickies import`.")
+    print()
+    for path, fm, body in sorted(rows, key=lambda r: (r[1].get("status", ""), r[0].name)):
+        print(f"- `{fm.get('status', '?'):<7}` [[{path.stem}]] - {title(body)}")
     return 0
 
 
@@ -323,6 +387,32 @@ def selftest():
             cmd_import([str(snapfile)])
         assert "skipped 2" in out.getvalue(), out.getvalue()
 
+        # changed/mark: everything is new until marked, then nothing is.
+        # import seeds the cache, so clear it first to test the from-scratch path.
+        for f in cache_dir().glob("*.md"):
+            f.unlink()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cmd_changed([])
+        assert "NEW" in out.getvalue(), out.getvalue()
+        with contextlib.redirect_stdout(io.StringIO()):
+            cmd_mark([])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cmd_changed([])
+        assert "in sync" in out.getvalue(), out.getvalue()
+        # touching one idea makes exactly that one show as changed
+        write_fm(p, {"status": "doing"})
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cmd_changed([])
+        lines = [l for l in out.getvalue().splitlines() if l.strip()]
+        assert len(lines) == 1 and p.name in lines[0], lines
+        with contextlib.redirect_stdout(io.StringIO()):
+            cmd_mark([])
+        # the cache must never be counted as an idea
+        assert len(ideas()) == 2, len(ideas())
+
         assert run_check("echo not-a-number") is None
         assert run_check("exit 1") is None
 
@@ -342,6 +432,7 @@ def selftest():
 def main():
     cmds = {"check": cmd_check, "stale": cmd_stale, "list": cmd_list, "new": cmd_new,
             "export": cmd_export, "import": cmd_import,
+            "changed": cmd_changed, "mark": cmd_mark, "index": cmd_index,
             "selftest": lambda a: selftest()}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(f"usage: stickies.py {{{'|'.join(cmds)}}} [args]   (inbox: {INBOX})", file=sys.stderr)

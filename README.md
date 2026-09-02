@@ -106,10 +106,9 @@ a complaint, "we should also...", "remind me to...", "that's broken", "I need to
    "Similar to <existing idea> — same thing, or different?" and wait. The user decides.
    If different, write the new file AND add one line to both saying why they differ.
    If same, touch the existing file (resets its staleness clock) and note the new wording.
-3. Otherwise create it:
-   `python3 ~/.claude/plugins/cache/stickies/scripts/stickies.py new "<idea>" "<heard while>"`
-   then fill in `check:` / `want:` if a shell check is possible, and the
-   `**To be ready:**` line with the one unknown blocking it.
+3. Otherwise create it: `stickies new "<idea>" "<heard while>"`, then fill in
+   `check:` / `want:` if a shell check is possible, and the `**To be ready:**` line
+   with the one unknown blocking it.
 
 Rules:
 - Silent. ONE line at the end of the reply: `📥 captured: <name>`. Nothing more.
@@ -121,8 +120,20 @@ Rules:
   Leave it empty rather than invent a check that does not work.
 ```
 
-Adjust the `stickies.py` path to wherever the plugin installed — `/plugin` will tell you,
-or just call it by its repo path if you cloned it.
+### Put the runner on your PATH first
+
+The plugin caches under a versioned directory, so any path you write down breaks on the
+next update. Drop this in `~/.local/bin/stickies` and `chmod +x` it:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+R=$(ls -d "$HOME"/.claude/plugins/cache/stickies/stickies/*/scripts/stickies.py 2>/dev/null | sort -V | tail -1 || true)
+[ -n "$R" ] || R="$HOME/src/stickies/scripts/stickies.py"   # fallback: your clone
+exec python3 "$R" "$@"
+```
+
+Now `stickies check` works from anywhere and survives every version bump.
 
 ## The file
 
@@ -178,11 +189,11 @@ checks can still read anything on disk, vault included.
 ## The runner directly
 
 ```bash
-python3 scripts/stickies.py check          # run every check, print the buckets
-python3 scripts/stickies.py stale 21       # live ideas untouched over 21 days
-python3 scripts/stickies.py list ready     # everything, or one status
-python3 scripts/stickies.py new "text" "heard while"
-python3 scripts/stickies.py selftest
+stickies check          # run every check, print the buckets
+stickies stale 21       # live ideas untouched over 21 days
+stickies list ready     # everything, or one status
+stickies new "text" "heard while"
+stickies selftest
 ```
 
 No dependencies. Python 3.9+.

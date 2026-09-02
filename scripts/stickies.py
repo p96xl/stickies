@@ -523,4 +523,21 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except BaseException as exc:  # noqa: BLE001 - last line of defence
+        # The vault URL is a credential. A raw traceback could print it, so scrub
+        # anything URL-shaped before it reaches a terminal or a transcript.
+        import traceback
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        try:
+            from vault import redact
+        except ImportError:
+            import re as _re
+
+            def redact(s):
+                return _re.sub(r"(https?://[^/\s]+)/\S+", r"\1/<redacted>", str(s))
+        print(redact("".join(traceback.format_exception(exc))), file=sys.stderr)
+        sys.exit(1)

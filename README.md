@@ -114,7 +114,10 @@ Rules:
 - Silent. ONE line at the end of the reply: `📥 captured: <name>`. Nothing more.
 - NEVER derail the current task to discuss the captured idea. That is the exact behaviour
   that orphans the work already in progress.
-- Never capture a question, or the thing you are already doing.
+- Never capture a question.
+- DO capture work being discussed right now if it will not be FINISHED in this
+  conversation - blocked, deferred, or too big for today. Only skip the specific task
+  you are actively completing this minute.
 - Always write a real "Heard while:" value. Weeks later it is the only context left.
 - A check must print how much is LEFT (`grep -c ... `, `... | wc -l`) with `want: 0`.
   Leave it empty rather than invent a check that does not work.

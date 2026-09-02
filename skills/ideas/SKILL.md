@@ -87,7 +87,11 @@ touch the existing file instead (which resets its staleness clock) and note the 
 - Silent. One line at the end of your reply: `📥 captured: <name>`. Nothing more.
 - Never derail the current task to discuss a captured idea. That is the exact behaviour
   that orphans the original work.
-- Never capture a question, or the thing you are already doing.
+- Never capture a question.
+- **Do capture work being discussed right now if it will not be FINISHED in this conversation**
+  - blocked on something, deferred, or just too big for today. "We are talking about it" is not
+  a reason to skip it; a conversation ending is exactly how an idea gets orphaned. Only skip
+  capturing the specific task you are actively completing this minute.
 - Write a real `**Heard while:**` value. Six weeks later it is the only context left.
 - Add a `check:` if you can think of one. A `grep -c ... ` or `grep -rl ... | wc -l` that
   prints how much is LEFT to do, with `want: 0`. An idea with a check never needs a human

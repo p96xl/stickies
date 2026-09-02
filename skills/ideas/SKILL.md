@@ -136,6 +136,10 @@ You read one summary line. Do NOT call read_note/write_note yourself when these 
 3. `stickies index`, `write_note` to `Stickies/Index.md`.
 4. `stickies mark` - never skip this, or the next sync re-pushes everything.
 
+**Only ever run `mark` straight after a real push.** It asserts "the vault has this", so
+running it on its own makes `changed` report in-sync when nothing was ever sent. If you
+suspect the cache is lying, `stickies push --all` resends everything and repairs it.
+
 **Never ask the user to paste the vault URL into the conversation.** It is the credential -
 a secret UUID in the path. Tell them to write it to the config file themselves.
 

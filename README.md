@@ -209,6 +209,7 @@ connector, and no vault address is ever stored in this repo.
 
 ```bash
 stickies push         # send changed ideas straight to the vault over MCP
+stickies push --all   # resend everything (repairs a stale cache)
 stickies pull         # fetch ideas from the vault
 stickies changed      # only the ideas that differ from the last vault sync
 stickies mark         # record that the cache now matches the vault

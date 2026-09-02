@@ -15,12 +15,17 @@ command-line argument (argv is world-readable via ps). Supply it as:
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 URL_FILE = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "stickies" / "mcp-url"
 PROTOCOLS = ("2025-06-18", "2024-11-05")
+# A tunnelled origin returns these while it is busy - e.g. reindexing after a
+# write. Measured: a 502 cleared on the next try 15 s later. Retry, do not fail.
+RETRY_CODES = (502, 503, 504, 520, 521, 522, 523, 524)
+RETRIES, BACKOFF = 4, 6
 
 
 class VaultError(RuntimeError):
@@ -91,17 +96,24 @@ class Vault:
         req = urllib.request.Request(
             self.url, data=json.dumps(payload).encode(), headers=headers, method="POST"
         )
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                sid = r.headers.get("Mcp-Session-Id")
-                if sid:
-                    self.session = sid
-                return r.read().decode("utf-8", "replace"), r.headers.get("Content-Type")
-        except urllib.error.HTTPError as e:
-            detail = e.read().decode("utf-8", "replace")[:200]
-            raise VaultError(f"HTTP {e.code} from vault: {redact(detail)}") from None
-        except urllib.error.URLError as e:
-            raise VaultError(f"cannot reach vault: {redact(e.reason)}") from None
+        last = None
+        for attempt in range(RETRIES):
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                    sid = r.headers.get("Mcp-Session-Id")
+                    if sid:
+                        self.session = sid
+                    return r.read().decode("utf-8", "replace"), r.headers.get("Content-Type")
+            except urllib.error.HTTPError as e:
+                detail = e.read().decode("utf-8", "replace")[:200]
+                last = VaultError(f"HTTP {e.code} from vault: {redact(detail)}")
+                if e.code not in RETRY_CODES:
+                    raise last from None
+            except urllib.error.URLError as e:
+                last = VaultError(f"cannot reach vault: {redact(e.reason)}")
+            if attempt < RETRIES - 1:
+                time.sleep(BACKOFF * (attempt + 1))
+        raise last from None
 
     def _call(self, method, params=None):
         self._rpc_id += 1
